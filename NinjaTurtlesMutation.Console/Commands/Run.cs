@@ -1,4 +1,4 @@
-#region Copyright & licence
+﻿#region Copyright & licence
 
 // This file is part of NinjaTurtles.
 // 
@@ -141,17 +141,6 @@ Example:
                         @"Not test found in the assembly {0}", _testAssemblyLocation);
                     return false;
                 }
-            }
-            var isAdmin = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-            if (!isAdmin)
-            {
-                using (new OutputWriterErrorHighlight())
-                {
-                    OutputWriter.WriteLine(
-                        OutputVerbosity.Quiet,
-                        @"The 'run' command need admin privilege to create symlink.");
-                }
-                return false;
             }
             if (Options.Options.Any(o => o is NoPreTest))
                 return true;
