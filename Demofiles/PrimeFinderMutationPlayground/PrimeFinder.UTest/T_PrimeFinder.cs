@@ -14,7 +14,7 @@ namespace PrimeFinder.UTest
             Assert.Catch(() => PrimeFinderMutationPlayground.PrimeFinder.IsPrime(n));
         }
 
-        //[TestCase(2, true)]
+        // [TestCase(2, true)]
         [TestCase(3, true)]
         [TestCase(4, false)]
         [TestCase(5, true)]
@@ -25,5 +25,15 @@ namespace PrimeFinder.UTest
         {
             Assert.AreEqual(isPrime, PrimeFinderMutationPlayground.PrimeFinder.IsPrime(n));
         }
+
+	//[TestCase(1)]
+	//[TestCase(0)]
+	//[TestCase(-1)]
+	//[TestCase(2)]
+	//[TestCase(27)]
+        //public void ShouldThrowIfDummyNull(int n)
+        //{
+	    //Assert.Catch(() => PrimeFinderMutationPlayground.PrimeFinder.IsPrimed(n, null));
+        //}
     }
 }
