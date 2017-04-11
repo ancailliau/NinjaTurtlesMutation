@@ -114,9 +114,11 @@ namespace NinjaTurtlesMutation.Reporting
 
         internal void RegisterMethod(MethodDefinition method)
         {
-            if (method.Body.Instructions.All(i => i.SequencePoint == null)) return;
+            var mapping = method.DebugInformation.GetSequencePointMapping();
+
+            if (method.Body.Instructions.All(i => !mapping.ContainsKey(i))) return;
             string sourceFileUrl =
-                method.Body.Instructions.First(i => i.SequencePoint != null).SequencePoint.Document.Url;
+                mapping[method.Body.Instructions.First(i => mapping.ContainsKey(i))].Document.Url;
             _readerWriterLock.EnterUpgradeableReadLock();
             try
             {
@@ -134,9 +136,10 @@ namespace NinjaTurtlesMutation.Reporting
                 _readerWriterLock.ExitUpgradeableReadLock();
             }
             var sourceFile = SourceFiles.First(s => s.Url == sourceFileUrl);
+            Mono.Cecil.Cil.SequencePoint seqPoint;
             var sequencePoints = method.Body.Instructions
-                .Where(i => i.SequencePoint != null && i.ShouldReportSequencePoint())
-                .Select(i => i.SequencePoint).Distinct();
+                                       .Where(i => mapping.TryGetValue(i, out seqPoint) && i.ShouldReportSequencePoint(seqPoint, mapping))
+                                       .Select(i => { mapping.TryGetValue(i, out seqPoint); return seqPoint; }).Distinct();
             foreach (var point in sequencePoints)
             {
                 sourceFile.AddSequencePoint(point);

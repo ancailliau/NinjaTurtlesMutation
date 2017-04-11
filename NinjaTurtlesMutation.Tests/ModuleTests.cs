@@ -49,10 +49,12 @@ namespace NinjaTurtlesMutation.Tests
         public void Module_Loads_Debug_Information_For_Mono()
         {
             var module = new Module(typeof(TestClassMono).Assembly.Location);
-            Assert.IsTrue(module.Definition.Types
+            Mono.Cecil.MethodDefinition methodDefinition = module.Definition.Types
                 .Single(t => t.Name == "TestClassMono")
-                .Methods.Single(m => m.Name == "Run")
-                .Body.Instructions.All(i => i.SequencePoint == null));
+                .Methods.Single(m => m.Name == "Run");
+			var mapping = methodDefinition.DebugInformation.GetSequencePointMapping();
+			Assert.IsTrue(methodDefinition
+						  .Body.Instructions.All(i => !mapping.ContainsKey(i)));
             module.LoadDebugInformation();
 //            Assert.IsTrue(module.Definition.Types
 //                .Single(t => t.Name == "TestClassMono")
@@ -63,16 +65,18 @@ namespace NinjaTurtlesMutation.Tests
         [Test]
         public void Module_Does_Not_Error_With_No_Debug_Information()
         {
-            var module = new Module(typeof(TestClassNoPdb).Assembly.Location);
-            Assert.IsTrue(module.Definition.Types
-                .Single(t => t.Name == "TestClassNoPdb")
-                .Methods.Single(m => m.Name == "Run")
-                .Body.Instructions.All(i => i.SequencePoint == null));
+			var module = new Module(typeof(TestClassNoPdb).Assembly.Location);
+			Mono.Cecil.MethodDefinition methodDefinition = module.Definition.Types
+				.Single(t => t.Name == "TestClassNoPdb")
+				.Methods.Single(m => m.Name == "Run");
+			var mapping = methodDefinition.DebugInformation.GetSequencePointMapping();
+			Assert.IsTrue(methodDefinition
+						  .Body.Instructions.All(i => !mapping.ContainsKey(i)));
             module.LoadDebugInformation();
             Assert.IsTrue(module.Definition.Types
                 .Single(t => t.Name == "TestClassNoPdb")
                 .Methods.Single(m => m.Name == "Run")
-                .Body.Instructions.All(i => i.SequencePoint == null));
+                .Body.Instructions.All(i => !mapping.ContainsKey(i)));
         }
     }
 }

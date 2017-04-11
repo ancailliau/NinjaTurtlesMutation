@@ -1,4 +1,4 @@
-#region Copyright & licence
+﻿#region Copyright & licence
 
 // This file is part of NinjaTurtles.
 // 
@@ -351,15 +351,15 @@ namespace NinjaTurtlesMutation
 	        foreach (var interfaceReference in type.Interfaces)
 	        {
 	            var thisModule = type.Module;
-	            if (interfaceReference.Scope.Name != type.Module.Assembly.Name.Name
-	                && interfaceReference.Scope is AssemblyNameReference)
+                if (interfaceReference.InterfaceType.Scope.Name != type.Module.Assembly.Name.Name
+	                && interfaceReference.InterfaceType.Scope is AssemblyNameReference)
 	            {
 	                thisModule =
-	                    interfaceReference.Module.AssemblyResolver.Resolve((AssemblyNameReference)interfaceReference.Scope).
+	                    interfaceReference.InterfaceType.Module.AssemblyResolver.Resolve((AssemblyNameReference)interfaceReference.InterfaceType.Scope).
 	                        MainModule;
 	            }
 	            var interfaceDefinition =
-	                thisModule.Types.SingleOrDefault(t => t.FullName == interfaceReference.FullName);
+	                thisModule.Types.SingleOrDefault(t => t.FullName == interfaceReference.InterfaceType.FullName);
 	            if (interfaceDefinition != null)
 	            {
                     var interfaceMethods = interfaceDefinition.Methods.Where(m => MethodsMatch(m, targetMethod));

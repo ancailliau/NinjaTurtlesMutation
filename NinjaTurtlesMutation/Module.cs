@@ -84,11 +84,12 @@ namespace NinjaTurtlesMutation
                 .Where(m => m.HasBody))
             {
                 MethodDefinition capturedMethod = method;
-                reader.Read(capturedMethod.Body,
-                    o => capturedMethod.Body.Instructions.FirstOrDefault(i => i.Offset >= o));
 
-                var sourceFiles = method.Body.Instructions.Where(i => i.SequencePoint != null)
-                    .Select(i => i.SequencePoint.Document.Url)
+                reader.Read(capturedMethod);
+                var mapping = method.DebugInformation.GetSequencePointMapping();
+
+                var sourceFiles = method.Body.Instructions.Where(mapping.ContainsKey)
+                    .Select(i => mapping[i].Document.Url)
                     .Distinct();
                 foreach (var sourceFile in sourceFiles)
                 {
@@ -107,12 +108,11 @@ namespace NinjaTurtlesMutation
                 foreach (var method in typeDefinition.Methods.Where(m => m.HasBody))
                 {
                     MethodDefinition capturedMethod = method;
-                    reader.Read(capturedMethod.Body,
-                        o => capturedMethod.Body.Instructions.FirstOrDefault(i => i.Offset >= o));
-
-                    var sourceFiles = method.Body.Instructions.Where(i => i.SequencePoint != null)
-                        .Select(i => i.SequencePoint.Document.Url)
-                        .Distinct();
+                    reader.Read(capturedMethod);
+                    var mapping = method.DebugInformation.GetSequencePointMapping();
+                    var sourceFiles = method.Body.Instructions.Where(mapping.ContainsKey)
+                                            .Select(i => mapping[i].Document.Url)
+                                            .Distinct();
                     foreach (var sourceFile in sourceFiles)
                     {
                         if (!SourceFiles.ContainsKey(sourceFile) && File.Exists(sourceFile))

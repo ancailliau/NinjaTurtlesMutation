@@ -111,10 +111,9 @@ namespace NinjaTurtlesMutation
             return false;
         }
 
-        internal static bool ShouldReportSequencePoint(this Instruction instruction)
-        {
-            if (instruction.SequencePoint.EndColumn == instruction.SequencePoint.StartColumn &&
-                instruction.SequencePoint.EndLine == instruction.SequencePoint.StartLine)
+        internal static bool ShouldReportSequencePoint(this Instruction instruction, SequencePoint seqPoint, IDictionary<Instruction, SequencePoint> mapping)
+		{
+            if (seqPoint.EndColumn == seqPoint.StartColumn && seqPoint.EndLine == seqPoint.StartLine)
             {
                 return false;
             }
@@ -126,7 +125,7 @@ namespace NinjaTurtlesMutation
                     instructions.Add(instruction);
                 }
                 instruction = instruction.Next;
-            } while (instruction != null && instruction.SequencePoint == null);
+            } while (instruction != null && mapping.ContainsKey(instruction));
             if (instructions.All(i => i.OpCode == OpCodes.Ret))
             {
                 return false;

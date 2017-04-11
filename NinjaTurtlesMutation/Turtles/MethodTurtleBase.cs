@@ -78,7 +78,7 @@ namespace NinjaTurtlesMutation.Turtles
             var nestedType =
                 method.DeclaringType.NestedTypes.FirstOrDefault(
                     t => t.Name.StartsWith(string.Format("<{0}>", method.Name))
-                    && t.Interfaces.Any(i => i.Name == "IEnumerable`1"));
+                    && t.Interfaces.Any(i => i.InterfaceType.Name == "IEnumerable`1"));
             if (nestedType == null)
                 return Enumerable.Empty<MutantMetaData>();
             

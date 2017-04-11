@@ -178,7 +178,9 @@ namespace NinjaTurtlesMutation.Turtles
             {
                 // HACKTAG: These variables seem to be used to store input parameters. Mutating variable
                 // reads in this case may well lead to a surviving mutant.
-                if (variable.Name.StartsWith("CS$6$"))
+                string name;
+                method.DebugInformation.TryGetName(variable, out name);
+				if (name.StartsWith("CS$6$"))
                 {
                     continue;
                 }

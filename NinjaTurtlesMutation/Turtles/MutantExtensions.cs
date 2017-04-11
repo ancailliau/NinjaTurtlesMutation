@@ -9,14 +9,18 @@ namespace NinjaTurtlesMutation.Turtles
         internal static SequencePoint GetCurrentSequencePoint(this MethodDefinition _method, int index)
         {
             var instruction = _method.Body.Instructions[index];
-            while ((instruction.SequencePoint == null
-                    || instruction.SequencePoint.StartLine == 0xfeefee) && index > 0)
+            var mapping = _method.DebugInformation.GetSequencePointMapping();
+
+            SequencePoint seqPoint;
+
+            while ((!mapping.TryGetValue(instruction, out seqPoint) || seqPoint.StartLine == 0xfeefee) && index > 0)
             {
                 index--;
                 instruction = _method.Body.Instructions[index];
             }
-            var sequencePoint = instruction.SequencePoint;
-            return sequencePoint;
+
+            mapping.TryGetValue(instruction, out seqPoint);
+            return seqPoint;
         }
 
         

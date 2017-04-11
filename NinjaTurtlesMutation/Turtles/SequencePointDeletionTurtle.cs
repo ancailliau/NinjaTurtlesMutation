@@ -67,17 +67,18 @@ namespace NinjaTurtlesMutation.Turtles
             var sequence = new Dictionary<int, OpCode>();
             var startIndex = -1;
             var instructionsMaxIndex = method.Body.Instructions.Count - 1;
+            var mapping = method.DebugInformation.GetSequencePointMapping();
             for (int index = 0; index < method.Body.Instructions.Count; index++)
             {
                 var instruction = method.Body.Instructions[index];
-                if (IsSequenceStartingInstruction(instruction))
+                if (IsSequenceStartingInstruction(instruction,mapping))
                 {
                     startIndex = index;
                     sequence.Clear();
                 }
                 if (startIndex >= 0)
                     sequence.Add(index, instruction.OpCode);
-                if (!IsLastSequenceInstruction(index, instructionsMaxIndex, instruction) || !ShouldDeleteSequence(method.Body, sequence, instruction))
+                if (!IsLastSequenceInstruction(index, instructionsMaxIndex, instruction, mapping) || !ShouldDeleteSequence(method.Body, sequence, instruction))
                     continue;
                 var originalInstruction = ReplaceOpcodeAndOperand(method, startIndex, OpCodes.Br, instruction.Next);
                 var codes = string.Join(", ", sequence.Values.Select(o => o.Code));
@@ -89,14 +90,15 @@ namespace NinjaTurtlesMutation.Turtles
             }
         }
 
-        private bool IsLastSequenceInstruction(int currentIndex, int maxIndex, Instruction instruction)
+        private bool IsLastSequenceInstruction(int currentIndex, int maxIndex, Instruction instruction, IDictionary<Instruction, SequencePoint> mapping)
         {
-            return currentIndex == maxIndex || instruction.Next.SequencePoint != null;
+            return currentIndex == maxIndex || mapping.ContainsKey(instruction.Next);
         }
 
-        private bool IsSequenceStartingInstruction(Instruction instruction)
+        private bool IsSequenceStartingInstruction(Instruction instruction, IDictionary<Instruction, SequencePoint> mapping)
         {
-            return instruction.SequencePoint != null && instruction.SequencePoint.StartLine != 0xfeefee;
+            return mapping.TryGetValue(instruction, out SequencePoint seqPoint) && seqPoint.StartLine != 0xfeefee;
+            // return mapping.ContainsKey(instruction) && mapping[instruction].StartLine != 0xfeefee;
         }
 
         private bool ShouldDeleteSequence(MethodBody method, IDictionary<int, OpCode> opCodes, Instruction currentInstruction)
