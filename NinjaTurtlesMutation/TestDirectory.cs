@@ -23,6 +23,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using Mono.Unix;
 using NLog;
 
 namespace NinjaTurtlesMutation
@@ -42,10 +43,6 @@ namespace NinjaTurtlesMutation
         #endregion
 
         private readonly string _folder;
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool CreateSymbolicLink(
-        string lpSymlinkFileName, string lpTargetFileName, SymbolicLink dwFlags);
 
         enum SymbolicLink
         {
@@ -145,10 +142,12 @@ namespace NinjaTurtlesMutation
                 _log.Trace("Copying file \"{0}\".", fileName);
                 // ReSharper disable once AssignNullToNotNullAttribute
                 string target = Path.Combine(targetDirectory, fileName);
-                if (toCopy.Contains(fileName))
-                    File.Copy(file, target);
-                else
-                    CreateSymbolicLink(target, file, SymbolicLink.File);
+				if (toCopy.Contains(fileName))
+					File.Copy(file, target);
+				else {
+					UnixSymbolicLinkInfo f = new UnixSymbolicLinkInfo(target);
+					f.CreateSymbolicLinkTo(file);
+				}
             }
             foreach (var subDirectory in Directory.GetDirectories(directory))
             {
