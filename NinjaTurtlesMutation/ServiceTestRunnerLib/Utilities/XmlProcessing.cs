@@ -3,7 +3,8 @@ using System.Xml.Serialization;
 
 namespace NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities
 {
-    internal static class XmlProcessing
+	// TODO from internal to public, not sure if appropriate
+	public static class XmlProcessing
     {
         public static string SerializeToXml<T>(T data)
         {

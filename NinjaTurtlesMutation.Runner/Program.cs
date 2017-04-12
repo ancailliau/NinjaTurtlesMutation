@@ -1,10 +1,14 @@
 ﻿using System;
 using System.IO;
 using System.IO.Pipes;
+using System.Text;
+using System.Threading;
 using NinjaTurtlesMutation.AppDomainIsolation;
 using NinjaTurtlesMutation.AppDomainIsolation.Adaptor;
 using NinjaTurtlesMutation.ServiceTestRunnerLib;
 using NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
 namespace NinjaTurtlesMutation.Runner
 {
@@ -19,21 +23,53 @@ namespace NinjaTurtlesMutation.Runner
             bool oneRunOnly = args[2] == true.ToString();
             _killTimeFactor = float.Parse(args[3]);
             AppDomain.CurrentDomain.UnhandledException += UnexpectedExceptionHandler;
+            var cancellationTokenSource = new CancellationTokenSource();
+            var cancellationToken = cancellationTokenSource.Token;
+            var channelInId = args[0];
+            var channelOutId = args[1];
+
             try
             {
-                using (PipeStream receivePipe = new AnonymousPipeClientStream(PipeDirection.In, args[0]))
-                using (PipeStream sendPipe = new AnonymousPipeClientStream(PipeDirection.Out, args[1]))
-                using (StreamWriter sendStream = new StreamWriter(sendPipe))
-                using (StreamReader receiveStream = new StreamReader(receivePipe))
-                using (new ErrorModeContext(ErrorModes.FailCriticalErrors | ErrorModes.NoGpFaultErrorBox))
+                var factory = new ConnectionFactory() { HostName = "localhost" };
+                using (var connection = factory.CreateConnection())
                 {
-                    while (true)
+                    using (var channel = connection.CreateModel())
                     {
-                        var testDescription = TestDescriptionExchanger.ReadATestDescription(receiveStream);
-                        RunDescribedTests(testDescription);
-                        TestDescriptionExchanger.SendATestDescription(sendStream, testDescription);
-                        if (oneRunOnly)
-                            break;
+                        channel.QueueDeclare(queue: channelInId,
+                                 durable: false,
+                                 exclusive: false,
+                                 autoDelete: false,
+                                 arguments: null);
+
+                        channel.QueueDeclare(queue: channelOutId,
+                                 durable: false,
+                                 exclusive: false,
+                                 autoDelete: false,
+                                 arguments: null);
+
+                        var consumer = new EventingBasicConsumer(channel);
+                        consumer.Received += (model, ea) =>
+                        {
+                            var body = ea.Body;
+                            var message = Encoding.UTF8.GetString(body);
+                            var testDescription = TestDescriptionExchanger.ReadATestDescription(message);
+
+                            RunDescribedTests(testDescription);
+
+                            TestDescriptionExchanger.SendATestDescription(channel, channelOutId, testDescription);
+
+                            if (oneRunOnly)
+                                cancellationTokenSource.Cancel();
+
+                        };
+
+                        channel.BasicConsume(queue: channelInId,
+                                             noAck: true,
+                                             consumer: consumer);
+
+                        while (!cancellationToken.IsCancellationRequested)
+                        {
+                        }
                     }
                 }
             }

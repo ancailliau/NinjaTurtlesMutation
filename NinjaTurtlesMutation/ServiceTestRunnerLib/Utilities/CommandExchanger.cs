@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
+using RabbitMQ.Client;
 
 namespace NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities
 {
@@ -13,15 +15,19 @@ namespace NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities
             public const string STOP = "stop";
         }
 
-        public static void SendData(StreamWriter sw, string cmd)
-        {
-            sw.WriteLine(TRANSFER_START);
-            sw.WriteLine(cmd);
-            sw.WriteLine(TRANSFER_STOP);
-            sw.Flush();
+        public static void SendData(IModel channel, string channelId, string cmd)
+		{
+			var body = System.Text.Encoding.UTF8.GetBytes(cmd);
+			channel.BasicPublish(exchange: "", routingKey: channelId, basicProperties: null, body: body);
+
+            //sw.WriteLine(TRANSFER_START);
+            //sw.WriteLine(cmd);
+            //sw.WriteLine(TRANSFER_STOP);
+            //sw.Flush();
         }
 
-        public static string ReadACommand(StreamReader sr)
+        [ObsoleteAttribute("This method is obsolete.", false)]
+		public static string ReadACommand(StreamReader sr)
         {
             string lineBuf = "";
             string cmd = "";

@@ -4,6 +4,11 @@ using System.IO;
 using System.IO.Pipes;
 using NinjaTurtlesMutation.ServiceTestRunnerLib;
 using NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities;
+using System.Threading.Tasks;
+using System.Threading;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Collections.Concurrent;
 
 namespace NinjaTurtlesMutation
 {
@@ -15,22 +20,6 @@ namespace NinjaTurtlesMutation
         #region Properties
 
         private readonly Process _coreProcess;
-
-        #region Pipe COM
-
-        private readonly AnonymousPipeServerStream _pipeIn;
-        private readonly AnonymousPipeServerStream _pipeOut;
-        private readonly AnonymousPipeServerStream _pipeCmd;
-
-        #endregion
-
-        #region Stream COM
-
-        private readonly StreamReader _streamIn;
-        private readonly StreamWriter _streamOut;
-        private readonly StreamWriter _streamCmd;
-
-        #endregion
 
         #region Tests Exchange
 
@@ -45,23 +34,59 @@ namespace NinjaTurtlesMutation
 
         #endregion
 
+        BlockingCollection<string> Messages = new BlockingCollection<string>();
+        string channelInId = "ntmdispatcher-in";
+        string channelOutId = "ntmdispatcher-out";
+        string channelCmdId = "ntmdispatcher-cmd";
+        IConnection connection;
+        IModel channel;
+
         public TestsDispatcher(int parallelLevel, int maxBusyRunners, bool oneTimeRunners, float killTimeFactor)
         {
-            _pipeIn = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
-            _pipeOut = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.Inheritable);
-            _pipeCmd = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.Inheritable);
-            _streamIn = new StreamReader(_pipeIn);
-            _streamOut = new StreamWriter(_pipeOut);
-            _streamCmd = new StreamWriter(_pipeCmd);
+            var factory = new ConnectionFactory() { HostName = "localhost" };
+
+            connection = factory.CreateConnection();
+            channel = connection.CreateModel();
+
+            channel.QueueDeclare(queue: channelInId,
+                             durable: false,
+                             exclusive: false,
+                             autoDelete: false,
+                             arguments: null);
+
+            channel.QueueDeclare(queue: channelOutId,
+                     durable: false,
+                     exclusive: false,
+                     autoDelete: false,
+                     arguments: null);
+
+            channel.QueueDeclare(queue: channelCmdId,
+                     durable: false,
+                     exclusive: false,
+                     autoDelete: false,
+                     arguments: null);
+
+            var consumer = new EventingBasicConsumer(channel);
+            consumer.Received += (model, ea) =>
+            {
+                var body = ea.Body;
+                var message = System.Text.Encoding.UTF8.GetString(body);
+                Messages.Add(message);
+            };
+            channel.BasicConsume(queue: channelInId,
+                                 noAck: true,
+                                 consumer: consumer);
+
+
             _coreProcess = new Process
             {
                 StartInfo =
                 {
                     FileName = DISPATCHER_NAME,
                     UseShellExecute = false,
-                    Arguments = _pipeOut.GetClientHandleAsString() + " " +
-                                _pipeIn.GetClientHandleAsString() + " " +
-                                _pipeCmd.GetClientHandleAsString() + " " +
+                    Arguments = channelOutId + " " +
+                                channelInId + " " +
+                                channelCmdId + " " +
                                 parallelLevel + " " +
                                 maxBusyRunners + " " +
                                 oneTimeRunners + " " +
@@ -69,22 +94,20 @@ namespace NinjaTurtlesMutation
                 }
             };
             _coreProcess.Start();
-            _pipeCmd.DisposeLocalCopyOfClientHandle();
-            _pipeOut.DisposeLocalCopyOfClientHandle();
-            _pipeIn.DisposeLocalCopyOfClientHandle();
         }
 
         #region Tests Exchange Methods
 
         public void SendTest(TestDescription test)
         {
-            TestDescriptionExchanger.SendATestDescription(_streamOut, test);
+            TestDescriptionExchanger.SendATestDescription(channel, channelOutId, test);
             _testsSended++;
         }
 
         public TestDescription ReadATest()
         {
-            var test = TestDescriptionExchanger.ReadATestDescription(_streamIn);
+            string message = Messages.Take();
+            var test = TestDescriptionExchanger.ReadATestDescription(message);
             _testsReceived++;
             return test;
         }
@@ -95,15 +118,9 @@ namespace NinjaTurtlesMutation
 
         public void Dispose()
         {
-            CommandExchanger.SendData(_streamCmd, CommandExchanger.Commands.STOP);
-
-            _streamIn.Dispose();
-            _streamOut.Dispose();
-            _streamCmd.Dispose();
-            _pipeIn.Dispose();
-            _pipeOut.Dispose();
-            _pipeCmd.Dispose();
-
+            CommandExchanger.SendData(channel, channelCmdId, CommandExchanger.Commands.STOP);
+            connection.Dispose();
+            channel.Dispose();
             _coreProcess.WaitForExit(EXIT_MAXWAIT);
         }
 

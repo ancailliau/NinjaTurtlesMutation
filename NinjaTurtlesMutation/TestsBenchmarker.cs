@@ -77,13 +77,16 @@ namespace NinjaTurtlesMutation
 
         private void SendTest(TestDescription test)
         {
-            TestDescriptionExchanger.SendATestDescription(_streamOut, test);
+			// TODO No longer a stream
+            // TestDescriptionExchanger.SendATestDescription(_streamOut, test);
         }
 
         private TestDescription ReadATest()
         {
-            var test = TestDescriptionExchanger.ReadATestDescription(_streamIn);
-            return test;
+			// TODO Oups, no longer a stream
+			return null;
+            // var test = TestDescriptionExchanger.ReadATestDescription(_streamIn);
+            // return test;
         }
 
         #endregion

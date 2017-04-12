@@ -10,6 +10,8 @@ using NinjaTurtlesMutation.AppDomainIsolation;
 using NinjaTurtlesMutation.AppDomainIsolation.Adaptor;
 using NinjaTurtlesMutation.ServiceTestRunnerLib;
 using NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
 namespace NinjaTurtlesMutation.Benchmarker
 {
@@ -19,24 +21,54 @@ namespace NinjaTurtlesMutation.Benchmarker
         {
             if (args.Length != 2)
                 Environment.Exit(1);
-            using (PipeStream receivePipe = new AnonymousPipeClientStream(PipeDirection.In, args[0]))
-            using (PipeStream sendPipe = new AnonymousPipeClientStream(PipeDirection.Out, args[1]))
-            using (StreamWriter sendStream = new StreamWriter(sendPipe))
-            using (StreamReader receiveStream = new StreamReader(receivePipe))
-            using (new ErrorModeContext(ErrorModes.FailCriticalErrors | ErrorModes.NoGpFaultErrorBox))
+
+            var factory = new ConnectionFactory() { HostName = "localhost" };
+            using (var connection = factory.CreateConnection())
             {
-                try
+                using (var channel = connection.CreateModel())
                 {
-                    var testDescription = TestDescriptionExchanger.ReadATestDescription(receiveStream);
-                    RunDescribedTests(testDescription);
-                    TestDescriptionExchanger.SendATestDescription(sendStream, testDescription);
-                }
-                catch (Exception)
-                {
-                    Environment.Exit(2);
+                    var channelInId = args[0];
+                    var channelOutId = args[1];
+
+                    channel.QueueDeclare(queue: channelInId,
+                             durable: false,
+                             exclusive: false,
+                             autoDelete: false,
+                             arguments: null);
+
+                    channel.QueueDeclare(queue: channelOutId,
+                             durable: false,
+                             exclusive: false,
+                             autoDelete: false,
+                             arguments: null);
+
+                    using (new ErrorModeContext(ErrorModes.FailCriticalErrors | ErrorModes.NoGpFaultErrorBox))
+                    {
+                        try
+                        {
+                            var consumer = new EventingBasicConsumer(channel);
+                            consumer.Received += (model, ea) =>
+                            {
+                                var body = ea.Body;
+                                var message = Encoding.UTF8.GetString(body);
+                                var testDescription = TestDescriptionExchanger.ReadATestDescription(message);
+                                RunDescribedTests(testDescription);
+                                TestDescriptionExchanger.SendATestDescription(channel, channelOutId, testDescription);
+
+                            };
+                            channel.BasicConsume(queue: channelInId,
+                                                 noAck: true,
+                                                 consumer: consumer);
+                        }
+                        catch (Exception)
+                        {
+                            Environment.Exit(2);
+                        }
+                    }
+
                 }
             }
-            Environment.Exit(0);
+
         }
 
         private static void RunDescribedTests(TestDescription testDescription)

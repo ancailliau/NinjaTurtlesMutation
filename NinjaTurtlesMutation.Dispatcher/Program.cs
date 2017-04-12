@@ -3,10 +3,13 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NinjaTurtlesMutation.ServiceTestRunnerLib;
 using NinjaTurtlesMutation.ServiceTestRunnerLib.Utilities;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
 namespace NinjaTurtlesMutation.Dispatcher
 {
@@ -20,7 +23,7 @@ namespace NinjaTurtlesMutation.Dispatcher
 
         #endregion
 
-        private static readonly List<TestRunnerHandler> _testRunners  = new List<TestRunnerHandler>();
+        private static readonly List<TestRunnerHandler> _testRunners = new List<TestRunnerHandler>();
 
         #region BackboneTasksProperties
 
@@ -88,6 +91,7 @@ namespace NinjaTurtlesMutation.Dispatcher
                 TestDescription testToDispatch = null;
                 if (!_unassignedJobs.TryDequeue(out testToDispatch))
                     continue;
+
                 while (testToDispatch != null)
                 {
                     int assignedRunnerIndex;
@@ -116,32 +120,58 @@ namespace NinjaTurtlesMutation.Dispatcher
 
         private static void ReceivingLoop()
         {
-            using (PipeStream receivePipe = new AnonymousPipeClientStream(PipeDirection.In, _pipeInStringHandler))
-            using (StreamReader receiveStream = new StreamReader(receivePipe))
+            var factory = new ConnectionFactory() { HostName = "localhost" };
+            using (var connection = factory.CreateConnection())
             {
-                while (!_shouldStop)
+                using (var channel = connection.CreateModel())
                 {
-                    var testDescription = TestDescriptionExchanger.ReadATestDescription(receiveStream);
-                    _unassignedJobs.Enqueue(testDescription);
+                    channel.QueueDeclare(queue: _pipeInStringHandler,
+                                 durable: false,
+                                 exclusive: false,
+                                 autoDelete: false,
+                                 arguments: null);
+
+                    var consumer = new EventingBasicConsumer(channel);
+                    consumer.Received += (model, ea) =>
+                    {
+                        var body = ea.Body;
+                        var message = Encoding.UTF8.GetString(body);
+                        var testDescription = TestDescriptionExchanger.ReadATestDescription(message);
+                        _unassignedJobs.Enqueue(testDescription);
+                    };
+                    channel.BasicConsume(queue: _pipeInStringHandler,
+                                         noAck: true,
+                                         consumer: consumer);
+
+                    while (!_shouldStop) { }
                 }
             }
         }
 
         private static void SendingLoop()
         {
-            using (PipeStream sendPipe = new AnonymousPipeClientStream(PipeDirection.Out, _pipeOutStringHandler))
-            using (StreamWriter sendStream = new StreamWriter(sendPipe))
+            var factory = new ConnectionFactory() { HostName = "localhost" };
+            using (var connection = factory.CreateConnection())
             {
-                while (true)
+                using (var channel = connection.CreateModel())
                 {
-                    while (_completedJobs.IsEmpty && !_shouldStop)
-                        Thread.Sleep(SENDING_JOBCHECK_COOLDOWN_MS);
-                    if (_shouldStop && _completedJobs.IsEmpty)
-                        break;
-                    TestDescription testDescriptionToSend;
-                    if (!_completedJobs.TryDequeue(out testDescriptionToSend))
-                        continue;
-                    TestDescriptionExchanger.SendATestDescription(sendStream, testDescriptionToSend);
+                    channel.QueueDeclare(queue: _pipeOutStringHandler,
+                                 durable: false,
+                                 exclusive: false,
+                                 autoDelete: false,
+                                 arguments: null);
+
+                    while (true)
+                    {
+                        while (_completedJobs.IsEmpty && !_shouldStop)
+                            Thread.Sleep(SENDING_JOBCHECK_COOLDOWN_MS);
+                        if (_shouldStop && _completedJobs.IsEmpty)
+                            break;
+                        TestDescription testDescriptionToSend;
+                        if (!_completedJobs.TryDequeue(out testDescriptionToSend))
+                            continue;
+                        TestDescriptionExchanger.SendATestDescription(channel, _pipeOutStringHandler, testDescriptionToSend);
+                    }
                 }
             }
         }
@@ -149,15 +179,32 @@ namespace NinjaTurtlesMutation.Dispatcher
         private static void CmdLoop()
         {
             Dictionary<string, Func<bool>> cmdActions = new Dictionary<string, Func<bool>>();
-
             cmdActions[CommandExchanger.Commands.STOP] = Stop;
-            using (PipeStream receivePipe = new AnonymousPipeClientStream(PipeDirection.In, _pipeCmdStringHandler))
-            using (StreamReader receiveStream = new StreamReader(receivePipe))
+
+            var factory = new ConnectionFactory() { HostName = "localhost" };
+            using (var connection = factory.CreateConnection())
             {
-                while (!_shouldStop)
+                using (var channel = connection.CreateModel())
                 {
-                    var cmd = CommandExchanger.ReadACommand(receiveStream);
-                    cmdActions[cmd]();
+                    channel.QueueDeclare(queue: _pipeCmdStringHandler,
+                                 durable: false,
+                                 exclusive: false,
+                                 autoDelete: false,
+                                 arguments: null);
+
+                    var consumer = new EventingBasicConsumer(channel);
+                    consumer.Received += (model, ea) =>
+                    {
+                        var body = ea.Body;
+                        var message = Encoding.UTF8.GetString(body);
+                        cmdActions[message]();
+                    };
+                    channel.BasicConsume(queue: _pipeCmdStringHandler,
+                                         noAck: true,
+                                         consumer: consumer);
+
+                    while (!_shouldStop) { }
+
                 }
             }
         }
@@ -169,7 +216,7 @@ namespace NinjaTurtlesMutation.Dispatcher
         private static void BusyRunnerHandler(TestRunnerHandler busyRunner, int busyRunnerIndex)
         {
             TestDescription sink;
-            var testResult = RetrieveTestResult(busyRunner, busyRunnerIndex);
+			var testResult = RetrieveTestResult(busyRunner, busyRunnerIndex);
             _completedJobs.Enqueue(testResult);
             _dispatchedJobs.TryRemove(busyRunnerIndex, out sink);
             Interlocked.Decrement(ref _busyRunnersCount);
@@ -202,6 +249,9 @@ namespace NinjaTurtlesMutation.Dispatcher
 
         private static bool Stop()
         {
+            foreach (var tr in _testRunners)
+                tr.KillTestRunner();
+
             _shouldStop = true;
             return true;
         }

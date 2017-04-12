@@ -19,6 +19,8 @@
 
 #endregion
 
+using NLog;
+
 using NinjaTurtlesMutation.Console.Options;
 
 namespace NinjaTurtlesMutation.Console
