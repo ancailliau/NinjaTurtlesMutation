@@ -8,11 +8,18 @@ using System.Collections.Generic;
 using RabbitMQ.Client.Events;
 using System.Text;
 using System.Collections.Concurrent;
+using NLog;
 
 namespace NinjaTurtlesMutation.Dispatcher
 {
     internal class TestRunnerHandler
-    {
+	{
+		#region Logging
+
+		private static readonly Logger _log = LogManager.GetCurrentClassLogger();
+
+		#endregion
+		
         private readonly Process _runnerProcess;
 
         public bool isBusy;
@@ -66,6 +73,8 @@ namespace NinjaTurtlesMutation.Dispatcher
                                                  killTimeFactor;
             _runnerProcess.Start();
             isBusy = false;
+
+            _log.Info("New runner started.");
         }
 
         public void KillTestRunner()
