@@ -58,13 +58,14 @@ namespace NinjaTurtlesMutation.Runner
 
                             TestDescriptionExchanger.SendATestDescription(channel, channelOutId, testDescription);
 
+                            channel.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
+
                             if (oneRunOnly)
                                 cancellationTokenSource.Cancel();
-
                         };
 
                         channel.BasicConsume(queue: channelInId,
-                                             noAck: true,
+                                             noAck: false,
                                              consumer: consumer);
 
                         while (!cancellationToken.IsCancellationRequested)
